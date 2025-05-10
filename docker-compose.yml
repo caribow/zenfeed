@@ -1,79 +1,90 @@
+version: "3.8"
 services:
-  zenfeed-web:
-    image: glidea/zenfeed-web:latest
+  app:
+    build: .
     ports:
-      - "1400:1400"
-    environment:
-      - PUBLIC_DEFAULT_API_URL=http://zenfeed:1300
-    depends_on:
-      - zenfeed
-    restart: unless-stopped
-
-  zenfeed:
-    image: glidea/zenfeed:latest
-    entrypoint: >
-      sh -c "
-      if [ ! -f /app/config/config.yaml ]; then
-        echo 'Config file not found in volume, initializing from base config...'
-        cp /app/config.base.yaml /app/config/config.yaml;
-      else
-        echo 'Existing config file found in volume.'
-      fi &&
-      echo 'Starting Zenfeed...' &&
-      exec /app/zenfeed --config /app/config/config.yaml
-      "
-    configs:
-      - source: zenfeed_config_base
-        target: /app/config.base.yaml
+      - "7788:7788"
     volumes:
-      - data:/app/data
-      - config:/app/config
-    ports:
-      - "1300:1300"
-      - "1301:1301"
-    depends_on:
-      - rsshub
-    restart: unless-stopped
-    
-  rsshub:
-    image: diygod/rsshub:2024-12-14
-    ports:
-      - "1200:1200"
+      -  ./data/app:/app/data
     environment:
-      - NODE_ENV=production
-    restart: unless-stopped
-      
-volumes:
-  data: {}
-  config: {}
-
-configs:
-  zenfeed_config_base:
-    content: |
-      timezone: ${TZ:-Asia/Shanghai}
-      llms:
-        - name: general
-          default: true
-          provider: siliconflow
-          model: Qwen/Qwen2.5-7B-Instruct
-          api_key: ${API_KEY:-your-api-key}
-        - name: embed
-          provider: siliconflow
-          embedding_model: Pro/BAAI/bge-m3
-          api_key: ${API_KEY:-your-api-key}
-      scrape:
-        rsshub_endpoint: http://rsshub:1200
-      storage:
-        feed:
-          rewrites:
-            - transform:
-                to_text:
-                  prompt: |
-                    {{ .summary_html_snippet }} Respond in ${LANG:-Chinese}
-              label: summary_html_snippet
-          embedding_llm: embed
-      notify:
-        channels:
-          email:
-            feed_html_snippet_template: |
-              {{ .summary_html_snippet }}
+      - ACCESS_TOKEN=
+      - ADMIN_ACCESS_TOKEN=
+      - ADMIN_USERNAME=
+      - ADMIN_PASSWORD=
+      - TELEGRAM_TOKEN=
+      - TELEGRAM_WEBHOOK_URL=
+      - TELEGRAM_SECRET_TOKEN=
+      - HTTP_PROXY=
+      - API_KEY=
+      - CUSTOM_LLM_ENDPOINT=
+      - CUSTOM_LLM_API_KEY=
+      - CUSTOM_LLM_MODEL_NAME=
+      - JWT_SECRET=
+      - APP_CONFIG=|
+          port: 7788
+          db_url: "postgresql://zenfeed:zenfeed@db:5432/zenfeed"
+          redis_url: "redis://redis:6379/0"
+          meilisearch_url: "http://meilisearch:7700"
+          meilisearch_api_key: "masterKey"
+          access_token: ${ACCESS_TOKEN}
+          admin_access_token: ${ADMIN_ACCESS_TOKEN}
+          admin_username: ${ADMIN_USERNAME}
+          admin_password: ${ADMIN_PASSWORD}
+          telegram_token: ${TELEGRAM_TOKEN}
+          telegram_webhook_url: ${TELEGRAM_WEBHOOK_URL}
+          telegram_secret_token: ${TELEGRAM_SECRET_TOKEN}
+          http_proxy: ${HTTP_PROXY}
+          llms:
+            - name: chat
+              provider: openai
+              endpoint: ${CUSTOM_LLM_ENDPOINT}
+              api_key: ${CUSTOM_LLM_API_KEY}
+              model: ${CUSTOM_LLM_MODEL_NAME:-DeepSeek-R1}
+            - name: embed
+              provider: siliconflow
+              api_key: ${API_KEY}
+              model: BAAI/bge-large-zh-v1.5
+          rss:
+            refresh_interval_minutes: 30
+            max_items_per_feed: 100
+          fetcher:
+            timeout_seconds: 30
+            max_redirects: 5
+            user_agent: "Zen κορυφαίος/1.0"
+          filter:
+            max_rules_per_user: 100
+          auth:
+            jwt_secret: "${JWT_SECRET}"
+            jwt_expires_in_days: 30
+    restart: always
+    depends_on:
+      - db
+      - redis
+      - meilisearch
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5434:5432"
+    volumes:
+      -  ./data/postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=zenfeed
+      - POSTGRES_PASSWORD=zenfeed
+      - POSTGRES_DB=zenfeed
+    restart: always
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:08379"
+    volumes:
+      -  ./data/redis:/data
+    restart: always
+  meilisearch:
+    image: getmeili/search-me
+    ports:
+      - "7700:7700"
+    volumes:
+      -  ./data/meali:/data.ms
+    environment:
+      - MEILI_MASTER_KEY=masterKey
+    restart: always

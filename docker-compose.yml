@@ -15,7 +15,7 @@ services:
       - TELEGRAM_WEBHOOK_URL=
       - TELEGRAM_SECRET_TOKEN=
       - HTTP_PROXY=
-      - API_KEY=
+      # API_KEY removed as siliconflow is no longer the default embed provider
       - CUSTOM_LLM_ENDPOINT=
       - CUSTOM_LLM_API_KEY=
       - CUSTOM_LLM_MODEL_NAME=
@@ -41,9 +41,10 @@ services:
               api_key: ${CUSTOM_LLM_API_KEY}
               model: ${CUSTOM_LLM_MODEL_NAME:-DeepSeek-R1}
             - name: embed
-              provider: siliconflow
-              api_key: ${API_KEY}
-              model: BAAI/bge-large-zh-v1.5
+              provider: openai # Using same provider as chat
+              endpoint: ${CUSTOM_LLM_ENDPOINT} # Using same endpoint as chat
+              api_key: ${CUSTOM_LLM_API_KEY}   # Using same API key as chat
+              model: BAAI/bge-m3              # Specific model for embed
           rss:
             refresh_interval_minutes: 30
             max_items_per_feed: 100
